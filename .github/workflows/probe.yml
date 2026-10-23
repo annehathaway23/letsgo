@@ -1,7 +1,7 @@
 name: probe
 
-# Temporary: prints real dependency versions and runner tooling so versions can
-# be pinned from evidence. Removed once the project is scaffolded.
+# Temporary: reports real dependency versions and runner tooling as annotations
+# (readable through the GitHub API) so versions can be pinned from evidence.
 on:
   workflow_dispatch:
   push:
@@ -15,32 +15,39 @@ jobs:
       - name: Runner tooling
         shell: pwsh
         run: |
-          foreach ($t in 'node','npm','pnpm','rustc','cargo','git','pwsh') {
-            Write-Host "== $t"
-            try { & $t --version } catch { Write-Host "missing" }
+          $o = @()
+          foreach ($t in 'node','npm','pnpm','rustc','cargo','git') {
+            try { $o += ("{0}: {1}" -f $t, ((& $t --version 2>&1) -join ' ')) } catch { $o += "$t: missing" }
           }
-          Write-Host "== rustup toolchains"
-          try { rustup show } catch { Write-Host "rustup missing" }
-          Write-Host "== WebView2"
-          Get-ItemProperty 'HKLM:\SOFTWARE\WOW6432Node\Microsoft\EdgeUpdate\Clients\{F3017226-FE2A-4295-8BDF-00C3A9A7E4C5}' -ErrorAction SilentlyContinue | Select-Object pv
+          try { $o += ("rustup: " + ((rustup show active-toolchain 2>&1) -join ' ')) } catch { $o += "rustup: missing" }
+          $o += ("os: " + [System.Environment]::OSVersion.VersionString)
+          $msg = ($o -join "%0A")
+          Write-Host "::notice title=runner::$msg"
 
       - name: npm versions
         shell: pwsh
         run: |
-          foreach ($p in '@tauri-apps/cli','@tauri-apps/api','react','react-dom','vite','@vitejs/plugin-react','typescript','tailwindcss','@tailwindcss/vite','vitest','jsdom','@testing-library/react','@playwright/test','@xterm/xterm','@xterm/addon-fit','@xterm/addon-web-links','eslint','typescript-eslint','prettier','zustand','@types/react','@types/react-dom') {
-            $v = npm view $p version 2>&1 | Select-Object -Last 1
-            Write-Host ("{0,-28} {1}" -f $p, $v)
+          $o = @()
+          foreach ($p in '@tauri-apps/cli','@tauri-apps/api','react','react-dom','vite','@vitejs/plugin-react','typescript','tailwindcss','@tailwindcss/vite','vitest','jsdom','@testing-library/react','@playwright/test','@xterm/xterm','@xterm/addon-fit','eslint','typescript-eslint','@eslint/js','prettier','@types/react','@types/react-dom','@types/node') {
+            $v = (npm view $p version 2>&1 | Select-Object -Last 1)
+            $o += ("{0} {1}" -f $p, $v)
           }
-          Write-Host "== peer deps of key packages"
-          npm view @vitejs/plugin-react peerDependencies --json
-          npm view @tailwindcss/vite peerDependencies --json
-          npm view vitest peerDependencies --json
-          npm view @tauri-apps/cli engines --json
+          Write-Host "::notice title=npm1::$(($o | Select-Object -First 12) -join '%0A')"
+          Write-Host "::notice title=npm2::$(($o | Select-Object -Skip 12) -join '%0A')"
+          $peer = @()
+          foreach ($p in '@vitejs/plugin-react','@tailwindcss/vite','vitest','@tauri-apps/cli') {
+            $field = if ($p -eq '@tauri-apps/cli') { 'engines' } else { 'peerDependencies' }
+            $j = (npm view $p $field --json 2>&1) -join ' '
+            $peer += "$p $field = $j"
+          }
+          Write-Host "::notice title=peers::$($peer -join '%0A')"
 
       - name: crates versions
         shell: pwsh
         run: |
-          foreach ($c in 'tauri','tauri-build','portable-pty','rusqlite','keyring','serde','serde_json','thiserror','parking_lot','uuid','tauri-plugin-global-shortcut') {
-            Write-Host "== $c"
-            cargo search $c --limit 1 2>&1 | Select-Object -First 1
+          $o = @()
+          foreach ($c in 'tauri','tauri-build','portable-pty','rusqlite','keyring','serde','serde_json','thiserror','uuid') {
+            $l = (cargo search $c --limit 1 2>&1 | Select-Object -First 1)
+            $o += "$l"
           }
+          Write-Host "::notice title=crates::$($o -join '%0A')"
