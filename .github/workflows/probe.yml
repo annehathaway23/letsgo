@@ -1,7 +1,7 @@
 name: probe
 
-# Temporary: reports real dependency versions and runner tooling as annotations
-# (readable through the GitHub API) so versions can be pinned from evidence.
+# Temporary: reports dependency compatibility data as annotations (readable
+# through the GitHub API). Removed once the project is scaffolded.
 on:
   workflow_dispatch:
   push:
@@ -12,48 +12,39 @@ jobs:
   versions:
     runs-on: windows-latest
     steps:
-      - name: Runner tooling
+      - name: crates
         shell: pwsh
         run: |
           $ErrorActionPreference = 'Continue'
           $o = @()
-          foreach ($t in 'node','npm','pnpm','rustc','cargo','git') {
-            try { $o += ("{0}: {1}" -f $t, ((& $t --version 2>&1) -join ' ')) } catch { $o += "${t}: missing" }
-          }
-          try { $o += ("rustup: " + ((rustup show active-toolchain 2>&1) -join ' ')) } catch { $o += "rustup: missing" }
-          $o += ("os: " + [System.Environment]::OSVersion.VersionString)
-          $msg = ($o -join "%0A")
-          Write-Host "::notice title=runner::$msg"
-          exit 0
-
-      - name: npm versions
-        shell: pwsh
-        run: |
-          $ErrorActionPreference = 'Continue'
-          $o = @()
-          foreach ($p in '@tauri-apps/cli','@tauri-apps/api','react','react-dom','vite','@vitejs/plugin-react','typescript','tailwindcss','@tailwindcss/vite','vitest','jsdom','@testing-library/react','@playwright/test','@xterm/xterm','@xterm/addon-fit','eslint','typescript-eslint','@eslint/js','prettier','@types/react','@types/react-dom','@types/node') {
-            $v = (npm view $p version 2>&1 | Select-Object -Last 1)
-            $o += ("{0} {1}" -f $p, $v)
-          }
-          Write-Host "::notice title=npm1::$(($o | Select-Object -First 12) -join '%0A')"
-          Write-Host "::notice title=npm2::$(($o | Select-Object -Skip 12) -join '%0A')"
-          $peer = @()
-          foreach ($p in '@vitejs/plugin-react','@tailwindcss/vite','vitest','@tauri-apps/cli') {
-            $field = if ($p -eq '@tauri-apps/cli') { 'engines' } else { 'peerDependencies' }
-            $j = (npm view $p $field --json 2>&1) -join ' '
-            $peer += "$p $field = $j"
-          }
-          Write-Host "::notice title=peers::$($peer -join '%0A')"
-          exit 0
-
-      - name: crates versions
-        shell: pwsh
-        run: |
-          $ErrorActionPreference = 'Continue'
-          $o = @()
-          foreach ($c in 'tauri','tauri-build','portable-pty','rusqlite','keyring','serde','serde_json','thiserror','uuid') {
-            $l = (cargo search $c --limit 1 2>&1 | Select-Object -First 1)
+          foreach ($c in 'tauri','tauri-build','portable-pty','rusqlite','keyring','serde','serde_json','tauri-plugin-opener') {
+            $l = (cargo search $c --limit 1 2>&1 | Where-Object { $_ -match '^[a-z0-9_-]+ = ' } | Select-Object -First 1)
             $o += "$l"
           }
           Write-Host "::notice title=crates::$($o -join '%0A')"
+          exit 0
+
+      - name: npm compat
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Continue'
+          $o = @()
+          foreach ($pair in @(
+            @('typescript-eslint','peerDependencies'),
+            @('eslint','engines'),
+            @('vite','engines'),
+            @('vitest','engines'),
+            @('@testing-library/react','peerDependencies'),
+            @('@testing-library/jest-dom','version'),
+            @('@testing-library/user-event','version'),
+            @('eslint-plugin-react-hooks','peerDependencies'),
+            @('@xterm/addon-web-links','version'),
+            @('zustand','version'),
+            @('typescript','engines')
+          )) {
+            $j = ((npm view $pair[0] $pair[1] --json 2>&1) -join ' ')
+            $o += ("{0} {1} = {2}" -f $pair[0], $pair[1], $j)
+          }
+          Write-Host "::notice title=compat1::$(($o | Select-Object -First 6) -join '%0A')"
+          Write-Host "::notice title=compat2::$(($o | Select-Object -Skip 6) -join '%0A')"
           exit 0
