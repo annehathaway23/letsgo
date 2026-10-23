@@ -15,6 +15,7 @@ jobs:
       - name: Runner tooling
         shell: pwsh
         run: |
+          $ErrorActionPreference = 'Continue'
           $o = @()
           foreach ($t in 'node','npm','pnpm','rustc','cargo','git') {
             try { $o += ("{0}: {1}" -f $t, ((& $t --version 2>&1) -join ' ')) } catch { $o += "$t: missing" }
@@ -23,10 +24,12 @@ jobs:
           $o += ("os: " + [System.Environment]::OSVersion.VersionString)
           $msg = ($o -join "%0A")
           Write-Host "::notice title=runner::$msg"
+          exit 0
 
       - name: npm versions
         shell: pwsh
         run: |
+          $ErrorActionPreference = 'Continue'
           $o = @()
           foreach ($p in '@tauri-apps/cli','@tauri-apps/api','react','react-dom','vite','@vitejs/plugin-react','typescript','tailwindcss','@tailwindcss/vite','vitest','jsdom','@testing-library/react','@playwright/test','@xterm/xterm','@xterm/addon-fit','eslint','typescript-eslint','@eslint/js','prettier','@types/react','@types/react-dom','@types/node') {
             $v = (npm view $p version 2>&1 | Select-Object -Last 1)
@@ -41,13 +44,16 @@ jobs:
             $peer += "$p $field = $j"
           }
           Write-Host "::notice title=peers::$($peer -join '%0A')"
+          exit 0
 
       - name: crates versions
         shell: pwsh
         run: |
+          $ErrorActionPreference = 'Continue'
           $o = @()
           foreach ($c in 'tauri','tauri-build','portable-pty','rusqlite','keyring','serde','serde_json','thiserror','uuid') {
             $l = (cargo search $c --limit 1 2>&1 | Select-Object -First 1)
             $o += "$l"
           }
           Write-Host "::notice title=crates::$($o -join '%0A')"
+          exit 0
