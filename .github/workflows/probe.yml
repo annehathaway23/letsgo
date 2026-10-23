@@ -18,7 +18,7 @@ jobs:
           $ErrorActionPreference = 'Continue'
           $o = @()
           foreach ($t in 'node','npm','pnpm','rustc','cargo','git') {
-            try { $o += ("{0}: {1}" -f $t, ((& $t --version 2>&1) -join ' ')) } catch { $o += "$t: missing" }
+            try { $o += ("{0}: {1}" -f $t, ((& $t --version 2>&1) -join ' ')) } catch { $o += "${t}: missing" }
           }
           try { $o += ("rustup: " + ((rustup show active-toolchain 2>&1) -join ' ')) } catch { $o += "rustup: missing" }
           $o += ("os: " + [System.Environment]::OSVersion.VersionString)
