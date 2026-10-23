@@ -1,0 +1,46 @@
+name: probe
+
+# Temporary: prints real dependency versions and runner tooling so versions can
+# be pinned from evidence. Removed once the project is scaffolded.
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - ".github/workflows/probe.yml"
+
+jobs:
+  versions:
+    runs-on: windows-latest
+    steps:
+      - name: Runner tooling
+        shell: pwsh
+        run: |
+          foreach ($t in 'node','npm','pnpm','rustc','cargo','git','pwsh') {
+            Write-Host "== $t"
+            try { & $t --version } catch { Write-Host "missing" }
+          }
+          Write-Host "== rustup toolchains"
+          try { rustup show } catch { Write-Host "rustup missing" }
+          Write-Host "== WebView2"
+          Get-ItemProperty 'HKLM:\SOFTWARE\WOW6432Node\Microsoft\EdgeUpdate\Clients\{F3017226-FE2A-4295-8BDF-00C3A9A7E4C5}' -ErrorAction SilentlyContinue | Select-Object pv
+
+      - name: npm versions
+        shell: pwsh
+        run: |
+          foreach ($p in '@tauri-apps/cli','@tauri-apps/api','react','react-dom','vite','@vitejs/plugin-react','typescript','tailwindcss','@tailwindcss/vite','vitest','jsdom','@testing-library/react','@playwright/test','@xterm/xterm','@xterm/addon-fit','@xterm/addon-web-links','eslint','typescript-eslint','prettier','zustand','@types/react','@types/react-dom') {
+            $v = npm view $p version 2>&1 | Select-Object -Last 1
+            Write-Host ("{0,-28} {1}" -f $p, $v)
+          }
+          Write-Host "== peer deps of key packages"
+          npm view @vitejs/plugin-react peerDependencies --json
+          npm view @tailwindcss/vite peerDependencies --json
+          npm view vitest peerDependencies --json
+          npm view @tauri-apps/cli engines --json
+
+      - name: crates versions
+        shell: pwsh
+        run: |
+          foreach ($c in 'tauri','tauri-build','portable-pty','rusqlite','keyring','serde','serde_json','thiserror','parking_lot','uuid','tauri-plugin-global-shortcut') {
+            Write-Host "== $c"
+            cargo search $c --limit 1 2>&1 | Select-Object -First 1
+          }
